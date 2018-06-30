@@ -10,11 +10,17 @@
 #include "args.h"
 #include "command_executor.h"
 #include "commands.h"
+#include "manually_partition_resolver.h"
 
 std::map<std::string, command_executor *> s_commands_map;
 shell_context s_global_context;
 size_t s_max_name_length = 0;
 size_t s_option_width = 70;
+
+int32_t pegasus::manually_partition_resolver::s_target_app_id;
+int32_t pegasus::manually_partition_resolver::s_target_partitions;
+dsn::rpc_address pegasus::manually_partition_resolver::s_target_addr;
+dsn::utils::ex_lock_nr pegasus::manually_partition_resolver::s_lock;
 
 void print_help();
 bool help_info(command_executor *e, shell_context *sc, arguments args)
@@ -257,6 +263,12 @@ static command_executor commands[] = {
         "local_get", "get value from local db", "<db_path> <hash_key> <sort_key>", local_get,
     },
     {
+        "manually_visit",
+        "manually visit key value from a server",
+        "<app_id> <partition_count> <server_address>",
+        manually_visit_node,
+    },
+    {
         "sst_dump",
         "dump sstable dir or files",
         "[--command=check|scan|none|raw] <--file=data_dir_OR_sst_file> "
@@ -285,7 +297,12 @@ static command_executor commands[] = {
         "<-c|--backup_history_cnt num>",
         add_backup_policy,
     },
-    {"ls_backup_policy", "list the names of the subsistent backup policies", "", ls_backup_policy},
+    {
+        "ls_backup_policy",
+        "list the names of the subsistent backup policies",
+        "",
+        ls_backup_policy,
+    },
     {
         "query_backup_policy",
         "query subsistent backup policy and last backup infos",
@@ -463,6 +480,7 @@ static void freeHintsCallback(void *ptr) { sdsfree((sds)ptr); }
 
 void initialize(int argc, char **argv)
 {
+    pegasus::manually_partition_resolver::register_resolver();
     std::cout << "Pegasus Shell " << PEGASUS_VERSION << std::endl;
     std::cout << "Type \"help\" for more information." << std::endl;
     std::cout << "Type \"Ctrl-D\" or \"Ctrl-C\" to exit the shell." << std::endl;

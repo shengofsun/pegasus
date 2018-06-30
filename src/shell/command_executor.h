@@ -22,7 +22,16 @@ struct shell_context
     pegasus::pegasus_client *pg_client;
     bool escape_all;
     int timeout_ms;
-    shell_context() : pg_client(nullptr), escape_all(false), timeout_ms(5000) {}
+    bool manually_visit;
+
+    shell_context()
+        : ddl_client(nullptr),
+          pg_client(nullptr),
+          escape_all(false),
+          timeout_ms(5000),
+          manually_visit(false)
+    {
+    }
 };
 
 struct arguments

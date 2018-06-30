@@ -23,6 +23,7 @@
 #include <pegasus/git_commit.h>
 #include <pegasus/error.h>
 
+#include "manually_partition_resolver.h"
 #include "command_executor.h"
 #include "command_utils.h"
 #include "command_helper.h"
@@ -554,6 +555,7 @@ inline bool use_app_as_current(command_executor *e, shell_context *sc, arguments
     } else if (args.argc == 2) {
         sc->current_app_name = args.argv[1];
         fprintf(stderr, "OK\n");
+        sc->manually_visit = false;
         return true;
     } else {
         return false;
@@ -2390,13 +2392,17 @@ inline bool data_operations(command_executor *e, shell_context *sc, arguments ar
     dassert(iter != data_operations_map.end(), "filter should done earlier");
     executor func = iter->second;
 
-    if (sc->current_app_name.empty()) {
-        fprintf(stderr, "No app is using now\nUSAGE: use [app_name]\n");
-        return true;
+    if (sc->manually_visit == false) {
+        if (sc->current_app_name.empty()) {
+            fprintf(stderr, "No app is using now\nUSAGE: use [app_name]\n");
+            return true;
+        }
+        sc->pg_client = pegasus::pegasus_client_factory::get_client(
+            sc->current_cluster_name.c_str(), sc->current_app_name.c_str());
+    } else {
+        sc->pg_client = pegasus::pegasus_client_factory::get_client("manually", "fake");
     }
 
-    sc->pg_client = pegasus::pegasus_client_factory::get_client(sc->current_cluster_name.c_str(),
-                                                                sc->current_app_name.c_str());
     if (sc->pg_client == nullptr) {
         fprintf(stderr,
                 "get client error, cluster_name(%s), app_name(%s)\n",
@@ -2445,6 +2451,24 @@ inline bool local_get(command_executor *e, shell_context *sc, arguments args)
     }
 
     delete db;
+    return true;
+}
+
+inline bool manually_visit_node(command_executor *e, shell_context *sc, arguments args)
+{
+    dverify(args.argc == 4);
+    int32_t app_id;
+    int32_t partition_count;
+    dsn::rpc_address target;
+
+    verify_logged((app_id = atoi(args.argv[1])) != 0, "parse %s as int failed\n", args.argv[1]);
+    verify_logged(
+        (partition_count = atoi(args.argv[2])) != 0, "parse %s as int failed\n", args.argv[2]);
+    verify_logged(
+        target.from_string_ipv4(args.argv[3]), "parse %s as rpc address failed\n", args.argv[3]);
+
+    pegasus::manually_partition_resolver::set_target(app_id, partition_count, target);
+    sc->manually_visit = true;
     return true;
 }
 
