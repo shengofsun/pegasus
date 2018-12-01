@@ -43,8 +43,11 @@ int pegasus_client_impl::pegasus_scanner_impl::next(std::string &hashkey,
 {
     ::dsn::utils::notify_event op_completed;
     int ret = -1;
-    auto callback = [&](
-        int err, std::string &&hash, std::string &&sort, std::string &&str, internal_info &&ii) {
+    auto callback = [&](int err,
+                        std::string &&hash,
+                        std::string &&sort,
+                        std::string &&str,
+                        internal_info &&ii) {
         ret = err;
         hashkey = std::move(hash);
         sortkey = std::move(sort);
@@ -173,7 +176,6 @@ void pegasus_client_impl::pegasus_scanner_impl::_next_batch()
                          dsn::message_ex *req,
                          dsn::message_ex *resp) mutable { _on_scan_response(err, req, resp); },
                   std::chrono::milliseconds(_options.timeout_ms),
-                  0,
                   _hash);
 }
 
@@ -206,7 +208,6 @@ void pegasus_client_impl::pegasus_scanner_impl::_start_scan()
             _on_scan_response(err, req, resp);
         },
         std::chrono::milliseconds(_options.timeout_ms),
-        0,
         _hash);
 }
 
@@ -277,7 +278,7 @@ pegasus_client_impl::pegasus_scanner_impl::~pegasus_scanner_impl()
 
     if (_client) {
         if (_context >= SCAN_CONTEXT_ID_VALID_MIN)
-            _client->clear_scanner(_context, 0, _hash);
+            _client->clear_scanner(_context, _hash);
         _client = nullptr;
     }
 }
@@ -286,11 +287,11 @@ void pegasus_client_impl::pegasus_scanner_impl_wrapper::async_next(
     async_scan_next_callback_t &&callback)
 {
     // wrap shared_ptr _p with callback
-    _p->async_next([ __p = _p, user_callback = std::move(callback) ](int error_code,
-                                                                     std::string &&hash_key,
-                                                                     std::string &&sort_key,
-                                                                     std::string &&value,
-                                                                     internal_info &&info) {
+    _p->async_next([__p = _p, user_callback = std::move(callback)](int error_code,
+                                                                   std::string &&hash_key,
+                                                                   std::string &&sort_key,
+                                                                   std::string &&value,
+                                                                   internal_info &&info) {
         user_callback(error_code,
                       std::move(hash_key),
                       std::move(sort_key),
@@ -302,5 +303,5 @@ void pegasus_client_impl::pegasus_scanner_impl_wrapper::async_next(
 const char pegasus_client_impl::pegasus_scanner_impl::_holder[] = {'\x00', '\x00', '\xFF', '\xFF'};
 const ::dsn::blob pegasus_client_impl::pegasus_scanner_impl::_min = ::dsn::blob(_holder, 0, 2);
 const ::dsn::blob pegasus_client_impl::pegasus_scanner_impl::_max = ::dsn::blob(_holder, 2, 2);
-}
-} // namespace
+} // namespace client
+} // namespace pegasus

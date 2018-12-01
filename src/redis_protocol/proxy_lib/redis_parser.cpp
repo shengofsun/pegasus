@@ -6,6 +6,7 @@
 
 #include <rocksdb/status.h>
 #include <dsn/dist/fmt_logging.h>
+#include <dsn/dist/replication/replication_other_types.h>
 #include <dsn/utility/string_conv.h>
 
 #include <rrdb/rrdb.client.h>
@@ -59,7 +60,10 @@ redis_parser::redis_parser(proxy_stub *op, dsn::message_ex *first_msg)
 {
     ::dsn::apps::rrdb_client *r;
     if (op) {
-        r = new ::dsn::apps::rrdb_client(op->get_service_uri());
+        std::vector<dsn::rpc_address> meta_list;
+        dsn::replication::replica_helper::load_meta_servers(
+            meta_list, "cluster", op->get_cluster());
+        r = new ::dsn::apps::rrdb_client(op->get_cluster(), meta_list, op->get_app());
         if (strlen(op->get_geo_app()) != 0) {
             _geo_client = dsn::make_unique<geo::geo_client>("config.ini",
                                                             op->get_cluster(),
@@ -396,8 +400,9 @@ void redis_parser::set_internal(redis_parser::message_entry &entry)
         // with a reference to prevent the object from being destroyed
         std::shared_ptr<proxy_session> ref_this = shared_from_this();
         dinfo("%s: send set command(%" PRId64 ")", remote_address.to_string(), entry.sequence_id);
-        auto on_set_reply = [ref_this, this, &entry](
-            ::dsn::error_code ec, dsn::message_ex *, dsn::message_ex *response) {
+        auto on_set_reply = [ref_this, this, &entry](::dsn::error_code ec,
+                                                     dsn::message_ex *,
+                                                     dsn::message_ex *response) {
             // when the "is_session_reset" flag is set, the socket may be broken.
             // so continue to reply the message is not necessary
             if (is_session_reset.load(std::memory_order_acquire)) {
@@ -532,8 +537,9 @@ void redis_parser::setex(message_entry &entry)
         }
 
         std::shared_ptr<proxy_session> ref_this = shared_from_this();
-        auto on_setex_reply = [ref_this, this, &entry](
-            ::dsn::error_code ec, dsn::message_ex *, dsn::message_ex *response) {
+        auto on_setex_reply = [ref_this, this, &entry](::dsn::error_code ec,
+                                                       dsn::message_ex *,
+                                                       dsn::message_ex *response) {
             if (is_session_reset.load(std::memory_order_acquire)) {
                 ddebug("%s: setex command seqid(%" PRId64 ") got reply, but session has reset",
                        remote_address.to_string(),
@@ -601,8 +607,9 @@ void redis_parser::get(message_entry &entry)
               remote_address.to_string(),
               entry.sequence_id);
         std::shared_ptr<proxy_session> ref_this = shared_from_this();
-        auto on_get_reply = [ref_this, this, &entry](
-            ::dsn::error_code ec, dsn::message_ex *, dsn::message_ex *response) {
+        auto on_get_reply = [ref_this, this, &entry](::dsn::error_code ec,
+                                                     dsn::message_ex *,
+                                                     dsn::message_ex *response) {
             if (is_session_reset.load(std::memory_order_acquire)) {
                 ddebug("%s: get command(%" PRId64 ") got reply, but session has reset",
                        remote_address.to_string(),
@@ -677,8 +684,9 @@ void redis_parser::del_internal(message_entry &entry)
               remote_address.to_string(),
               entry.sequence_id);
         std::shared_ptr<proxy_session> ref_this = shared_from_this();
-        auto on_del_reply = [ref_this, this, &entry](
-            ::dsn::error_code ec, dsn::message_ex *, dsn::message_ex *response) {
+        auto on_del_reply = [ref_this, this, &entry](::dsn::error_code ec,
+                                                     dsn::message_ex *,
+                                                     dsn::message_ex *response) {
             if (is_session_reset.load(std::memory_order_acquire)) {
                 ddebug("%s: del command seqid(%" PRId64 ") got reply, but session has reset",
                        remote_address.to_string(),
@@ -786,8 +794,9 @@ void redis_parser::ttl(message_entry &entry)
               remote_address.to_string(),
               entry.sequence_id);
         std::shared_ptr<proxy_session> ref_this = shared_from_this();
-        auto on_ttl_reply = [ref_this, this, &entry, is_ttl](
-            ::dsn::error_code ec, dsn::message_ex *, dsn::message_ex *response) {
+        auto on_ttl_reply = [ref_this, this, &entry, is_ttl](::dsn::error_code ec,
+                                                             dsn::message_ex *,
+                                                             dsn::message_ex *response) {
             if (is_session_reset.load(std::memory_order_acquire)) {
                 ddebug("%s: ttl/pttl command seqid(%" PRId64 ") got reply, but session has reset",
                        remote_address.to_string(),
@@ -887,7 +896,7 @@ void redis_parser::geo_radius(message_entry &entry)
 
     std::shared_ptr<proxy_session> ref_this = shared_from_this();
     auto search_callback = [ref_this, this, &entry, unit, WITHCOORD, WITHDIST, WITHHASH](
-        int ec, std::list<geo::SearchResult> &&results) {
+                               int ec, std::list<geo::SearchResult> &&results) {
         process_geo_radius_result(
             entry, unit, WITHCOORD, WITHDIST, WITHHASH, ec, std::move(results));
     };
@@ -934,7 +943,7 @@ void redis_parser::geo_radius_by_member(message_entry &entry)
 
     std::shared_ptr<proxy_session> ref_this = shared_from_this();
     auto search_callback = [ref_this, this, &entry, unit, WITHCOORD, WITHDIST, WITHHASH](
-        int ec, std::list<geo::SearchResult> &&results) {
+                               int ec, std::list<geo::SearchResult> &&results) {
         process_geo_radius_result(
             entry, unit, WITHCOORD, WITHDIST, WITHHASH, ec, std::move(results));
     };
@@ -1005,7 +1014,7 @@ void redis_parser::counter_internal(message_entry &entry)
 
     std::shared_ptr<proxy_session> ref_this = shared_from_this();
     auto on_incr_reply = [ref_this, this, command, &entry](
-        ::dsn::error_code ec, dsn::message_ex *, dsn::message_ex *response) {
+                             ::dsn::error_code ec, dsn::message_ex *, dsn::message_ex *response) {
         if (is_session_reset.load(std::memory_order_acquire)) {
             dwarn_f("{}: command {} seqid({}) got reply, but session has reset",
                     remote_address.to_string(),
@@ -1334,5 +1343,5 @@ void redis_parser::redis_array::marshalling(::dsn::binary_writer &write_stream) 
         }
     }
 }
-}
-} // namespace
+} // namespace proxy
+} // namespace pegasus

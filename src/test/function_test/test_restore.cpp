@@ -34,7 +34,7 @@ public:
         std::this_thread::sleep_for(std::chrono::seconds(3));
 
         std::vector<dsn::rpc_address> meta_list;
-        replica_helper::load_meta_servers(meta_list, "uri-resolver.dsn://mycluster", "arguments");
+        replica_helper::load_meta_servers(meta_list, "cluster", "mycluster");
 
         ddl_client = std::make_shared<replication_ddl_client>(meta_list);
         error_code err =
@@ -227,10 +227,11 @@ public:
     int64_t get_first_backup_timestamp()
     {
         std::string policy_dir = dsn::utils::filesystem::path_combine(cluster_name, policy_name);
-        std::string cmd = "cd " + policy_dir + "; "
-                                               "ls -c > restore_app_from_backup_test_tmp; "
-                                               "tail -n 1 restore_app_from_backup_test_tmp; "
-                                               "rm restore_app_from_backup_test_tmp";
+        std::string cmd = "cd " + policy_dir +
+                          "; "
+                          "ls -c > restore_app_from_backup_test_tmp; "
+                          "tail -n 1 restore_app_from_backup_test_tmp; "
+                          "rm restore_app_from_backup_test_tmp";
         std::stringstream ss;
         assert(dsn::utils::pipe_execute(cmd.c_str(), ss) == 0);
         std::string result = ss.str();
